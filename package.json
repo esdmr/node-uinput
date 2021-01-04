@@ -1,10 +1,11 @@
 {
   "name": "uinput",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Linux uinput module",
   "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
-    "build": "node-gyp configure build"
+    "build": "node-gyp rebuild"
   },
   "repository": "https://github.com/santigimeno/node-uinput.git",
   "keywords": [
@@ -21,6 +22,7 @@
     "nan": "^2.14.0"
   },
   "devDependencies": {
+    "@types/node": "^14.0.4",
     "node-gyp": "^6.1.0"
   }
 }

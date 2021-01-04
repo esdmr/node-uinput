@@ -1,11 +1,19 @@
+/// <reference path="./index.d.ts" />
 const fs = require('fs');
 const bindings = require('bindings')('uinput');
 const ioctl = require('ioctl');
+const os = require('os');
 
-const InputEvent = bindings.input_event;
-const Events = bindings.events;
+/** @type {import('./index').InputEvent} */
+const inputEvent = bindings.input_event;
+/** @type {import('./index')['events']} */
+const events = bindings.events;
 
-// Throughout this file there's an assumption that the host machine is little endian.
+let writeUInt16 = /** @type {'writeUInt16LE' | 'writeUInt16BE'} */
+    ('writeUInt16' + os.endianness());
+
+let writeInt32 = /** @type {'writeInt32LE' | 'writeInt32BE'} */
+    ('writeInt32' + os.endianness());
 
 // struct input_id {
 //     __u16 bustype;
@@ -14,51 +22,66 @@ const Events = bindings.events;
 //     __u16 version;
 // };
 
-function InputId(options) {
+/**
+ * @param {import('./index').CreateConfig['id']} options
+ */
+function inputId (options) {
     const buffer = Buffer.alloc(4 * 2);
-    buffer.writeUInt16LE(options.busType, 0);
-    buffer.writeUInt16LE(options.vendor, 2);
-    buffer.writeUInt16LE(options.product, 4);
-    buffer.writeUInt16LE(options.version, 6);
+    buffer[writeUInt16](options.busType, 0);
+    buffer[writeUInt16](options.vendor, 2);
+    buffer[writeUInt16](options.product, 4);
+    buffer[writeUInt16](options.version, 6);
     return buffer;
 };
 
-function DeviceName(name) {
-    const buf = Buffer.alloc(Events.UINPUT_MAX_NAME_SIZE).fill(0);
-    if (name) {
-        buf.write(name, 0);
-    }
+/**
+ * @param {string} name
+ */
+function deviceName (name = '') {
+    const buf = Buffer.alloc(events.UINPUT_MAX_NAME_SIZE);
+    buf.write(name, 0);
     return buf;
 }
 
-function AbsArray(abs) {
-    const buf = Buffer.alloc(Events.ABS_CNT * 4).fill(0);
-    if (abs) {
-        for (let i = 0; i < abs.length; i++) {
-            buf.writeUInt32LE(abs[i].value, abs[i].offset * 4);
-        }
+/**
+ * @param {import('./index').Abs[]} absArr
+ */
+function absArray (absArr = []) {
+    const buf = Buffer.alloc(events.ABS_CNT * 4);
+
+    for (const abs of absArr) {
+        buf[writeInt32](abs.value, abs.offset * 4);
     }
+
     return buf;
 }
 
-const Abs = (offset, value) => {
+/**
+ * @param {number} offset
+ * @param {number} value
+ * @returns {import('./index').Abs}
+ */
+function abs (offset, value) {
     return {
         offset: offset,
         value: value
     };
 };
 
-function UInputUserDev(options) {
-    const name = DeviceName(options.name);
-    const id = InputId(options.id);
+/**
+ * @param {import('./index').CreateConfig} options
+ */
+function uinputUserDev (options) {
+    const name = deviceName(options.name);
+    const id = inputId(options.id);
 
     const ffEffectsMax = Buffer.alloc(4);
-    ffEffectsMax.writeUInt32LE(options.ffEffectsMax || 0, 0);
+    ffEffectsMax[writeInt32](options.ffEffectsMax || 0, 0);
 
-    const absMax = AbsArray(options.absMax);
-    const absMin = AbsArray(options.absMin);
-    const absFuzz = AbsArray(options.absFuzz);
-    const absFlat = AbsArray(options.absFlat);
+    const absMax = absArray(options.absMax);
+    const absMin = absArray(options.absMin);
+    const absFuzz = absArray(options.absFuzz);
+    const absFlat = absArray(options.absFlat);
 
     return Buffer.concat([
         name,
@@ -72,26 +95,36 @@ function UInputUserDev(options) {
 }
 
 const ioctls = [
-    Events.UI_SET_KEYBIT,
-    Events.UI_SET_RELBIT,
-    Events.UI_SET_ABSBIT,
-    Events.UI_SET_MSCBIT,
-    Events.UI_SET_LEDBIT,
-    Events.UI_SET_SNDBIT,
-    Events.UI_SET_FFBIT,
-    Events.UI_SET_PHYS,
-    Events.UI_SET_SWBIT,
-    Events.UI_SET_PROPBIT
+    events.UI_SET_KEYBIT,
+    events.UI_SET_RELBIT,
+    events.UI_SET_ABSBIT,
+    events.UI_SET_MSCBIT,
+    events.UI_SET_LEDBIT,
+    events.UI_SET_SNDBIT,
+    events.UI_SET_FFBIT,
+    events.UI_SET_PHYS,
+    events.UI_SET_SWBIT,
+    events.UI_SET_PROPBIT
 ];
 
 class UInput {
-    constructor(stream) {
+    /**
+     * @param {import('fs').WriteStream} stream
+     * @param {number} fd
+     */
+    constructor (stream, fd) {
         this.stream = stream;
+        this.fd = fd;
     }
 
-    async write(data) {
+    async write (data) {
+        if (this.stream.writableEnded) {
+            throw new Error('Write to uinput after being destroyed.');
+        }
+
         return new Promise((resolve, reject) => {
             this.stream.once('error', reject);
+
             this.stream.write(data, (err) => {
                 this.stream.removeAllListeners('error');
                 if (err) {
@@ -102,74 +135,84 @@ class UInput {
         });
     }
 
-    async create(options) {
+    async create (options) {
         if (!options.id) {
             throw new Error('Device id params is mandatory');
         }
 
-        const userDev = UInputUserDev(options);
+        const userDev = uinputUserDev(options);
 
         return new Promise((resolve, reject) => {
             this.stream.once('error', reject);
             this.stream.write(userDev, (err) => {
-                if (ioctl(this.stream.fd, Events.UI_DEV_CREATE)) {
+                if (ioctl(this.fd, events.UI_DEV_CREATE)) {
                     throw new Error('Could not create uinput device');
                 }
 
-                this.stream.removeAllListeners('error');
+                this.stream.removeListener('error', reject);
                 resolve();
             });
         });
     }
 
-    async sendEvent(type, code, value) {
-        await this.write(InputEvent(type, code, value));
-        await this.write(InputEvent(Events.EV_SYN, Events.SYN_REPORT, 0));
+    async destroy () {
+        if (ioctl(this.fd, events.UI_DEV_DESTROY)) {
+            throw new Error('Could not create uinput device');
+        }
+
+        this.stream.end();
     }
 
-    async keyEvent(code) {
+    async sendEvent (type, code, value) {
+        await this.write(inputEvent(type, code, value));
+        await this.write(inputEvent(events.EV_SYN, events.SYN_REPORT, 0));
+    }
+
+    async keyEvent (code) {
         /* press / click */
-        await this.sendEvent(Events.EV_KEY, code, 1);
-        await this.sendEvent(Events.EV_KEY, code, 0);
+        await this.sendEvent(events.EV_KEY, code, 1);
+        await this.sendEvent(events.EV_KEY, code, 0);
     }
 
-    async emitCombo(code) {
+    async emitCombo (code) {
         // Press each of the keys in series
         for (let i = 0; i < code.length; i++) {
-            await this.sendEvent(Events.EV_KEY, code[i], 1);
+            await this.sendEvent(events.EV_KEY, code[i], 1);
         }
+
         // Release them in reverse
         for (let i = code.length; i-- > 0;) {
-            await this.sendEvent(Events.EV_KEY, code[i], 0);
+            await this.sendEvent(events.EV_KEY, code[i], 0);
         }
     }
 };
 
-async function setup(options) {
+async function setup (options) {
     return new Promise((resolve, reject) => {
         const stream = fs.createWriteStream('/dev/uinput');
-        const uinput = new UInput(stream);
         stream.once('error', reject);
+
         stream.on('open', (fd) => {
-            const events = Object.keys(options);
-            for (let i = 0; i < events.length; i++) {
-                const ev = events[i];
-                if (ioctl(fd, Events.UI_SET_EVBIT, Events[ev])) {
+            const eventKeys = Object.keys(options);
+
+            for (const ev of eventKeys) {
+                if (ioctl(fd, events.UI_SET_EVBIT, events[ev])) {
                     throw new Error("Could not listen for event: " + ev);
                 }
-                for (let j = 0; j < (options[ev]).length; j++) {
-                    const val = options[ev][j];
-                    if (ioctl(fd, ioctls[Events[ev] - 1], val)) {
+
+                for (const val of options[ev]) {
+                    if (ioctl(fd, ioctls[events[ev] - 1], val)) {
                         throw new Error("Could not setup: " + val);
                     }
                 }
             }
+
             stream.removeAllListeners('error');
-            resolve(uinput);
+            resolve(new UInput(stream, fd));
         });
     });
 }
 
-module.exports = Events;
-module.exports.Abs = Abs;
+module.exports.events = events;
+module.exports.abs = abs;
 module.exports.setup = setup;
