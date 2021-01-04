@@ -135,3 +135,9 @@ Wrapper over send_event to simulate key presses and mouse clicks.
 
 It sends an event to the uinput device with the combination
 keys generated.
+
+### async UInputClass.destroy()
+
+* *code* `Number`
+
+It stops the uinput device.
