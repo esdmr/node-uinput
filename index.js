@@ -122,14 +122,16 @@ class UInput {
             throw new Error('Write to uinput after being destroyed.');
         }
 
-        return new Promise((resolve, reject) => {
+        return await new Promise((resolve, reject) => {
             this.stream.once('error', reject);
 
             this.stream.write(data, (err) => {
-                this.stream.removeAllListeners('error');
+                this.stream.removeListener('error', reject);
+
                 if (err) {
                     return reject(err);
                 }
+
                 resolve();
             });
         });
@@ -142,11 +144,12 @@ class UInput {
 
         const userDev = uinputUserDev(options);
 
-        return new Promise((resolve, reject) => {
+        return await new Promise((resolve, reject) => {
             this.stream.once('error', reject);
+
             this.stream.write(userDev, (err) => {
                 if (ioctl(this.fd, events.UI_DEV_CREATE)) {
-                    throw new Error('Could not create uinput device');
+                    return reject(new Error('Could not create uinput device'));
                 }
 
                 this.stream.removeListener('error', reject);
@@ -156,11 +159,13 @@ class UInput {
     }
 
     async destroy () {
-        if (ioctl(this.fd, events.UI_DEV_DESTROY)) {
-            throw new Error('Could not create uinput device');
-        }
+        return await new Promise((resolve, reject) => {
+            if (ioctl(this.fd, events.UI_DEV_DESTROY)) {
+                return reject(new Error('Could not destroy uinput device'));
+            }
 
-        this.stream.end();
+            this.stream.end(() => resolve());
+        });
     }
 
     async sendEvent (type, code, value) {
@@ -187,8 +192,11 @@ class UInput {
     }
 };
 
+/**
+ * @returns {Promise<UInput>}
+ */
 async function setup (options) {
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
         const stream = fs.createWriteStream('/dev/uinput');
         stream.once('error', reject);
 
@@ -197,17 +205,17 @@ async function setup (options) {
 
             for (const ev of eventKeys) {
                 if (ioctl(fd, events.UI_SET_EVBIT, events[ev])) {
-                    throw new Error("Could not listen for event: " + ev);
+                    return reject(new Error("Could not listen for event: " + ev));
                 }
 
                 for (const val of options[ev]) {
                     if (ioctl(fd, ioctls[events[ev] - 1], val)) {
-                        throw new Error("Could not setup: " + val);
+                        return reject(new Error("Could not setup: " + val));
                     }
                 }
             }
 
-            stream.removeAllListeners('error');
+            stream.removeListener('error', reject);
             resolve(new UInput(stream, fd));
         });
     });
