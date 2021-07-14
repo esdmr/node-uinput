@@ -32,7 +32,7 @@ function inputId (options) {
     buffer[writeUInt16](options.product, 4);
     buffer[writeUInt16](options.version, 6);
     return buffer;
-};
+}
 
 /**
  * @param {string} name
@@ -93,19 +93,6 @@ function uinputUserDev (options) {
         absFlat
     ]);
 }
-
-const ioctls = [
-    events.UI_SET_KEYBIT,
-    events.UI_SET_RELBIT,
-    events.UI_SET_ABSBIT,
-    events.UI_SET_MSCBIT,
-    events.UI_SET_LEDBIT,
-    events.UI_SET_SNDBIT,
-    events.UI_SET_FFBIT,
-    events.UI_SET_PHYS,
-    events.UI_SET_SWBIT,
-    events.UI_SET_PROPBIT
-];
 
 class UInput {
     /**
@@ -168,15 +155,20 @@ class UInput {
         });
     }
 
-    async sendEvent (type, code, value) {
+    async sendEvent (type, code, value, syn = true) {
         await this.write(inputEvent(type, code, value));
-        await this.write(inputEvent(events.EV_SYN, events.SYN_REPORT, 0));
+
+        if (syn) {
+            await this.write(inputEvent(events.EV_SYN, events.SYN_REPORT, 0));
+        }
     }
 
-    async keyEvent (code) {
-        /* press / click */
-        await this.sendEvent(events.EV_KEY, code, 1);
-        await this.sendEvent(events.EV_KEY, code, 0);
+    async keyEvent (code, press = true) {
+        if (press) {
+            await this.sendEvent(events.EV_KEY, code, 1);
+        } else {
+            await this.sendEvent(events.EV_KEY, code, 0);
+        }
     }
 
     async emitCombo (code) {
@@ -190,7 +182,7 @@ class UInput {
             await this.sendEvent(events.EV_KEY, code[i], 0);
         }
     }
-};
+}
 
 /**
  * @returns {Promise<UInput>}
@@ -201,16 +193,16 @@ async function setup (options) {
         stream.once('error', reject);
 
         stream.on('open', (fd) => {
-            const eventKeys = Object.keys(options);
+            for (const [key, values] of Object.entries(options)) {
+                const indexEvent = events[key];
 
-            for (const ev of eventKeys) {
-                if (ioctl(fd, events.UI_SET_EVBIT, events[ev])) {
-                    return reject(new Error("Could not listen for event: " + ev));
+                if (indexEvent === undefined) {
+                    throw new RangeError(`'${key}' is not a valid event`);
                 }
 
-                for (const val of options[ev]) {
-                    if (ioctl(fd, ioctls[events[ev] - 1], val)) {
-                        return reject(new Error("Could not setup: " + val));
+                for (const value of values || []) {
+                    if (ioctl(fd, indexEvent, value)) {
+                        throw new Error(`Could not setup: ${key}: ${value}`);
                     }
                 }
             }
