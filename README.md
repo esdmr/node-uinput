@@ -19,12 +19,6 @@ const SETUP_OPTIONS = {
         UInput.events.EV_SYN,
         UInput.events.EV_REL,
     ],
-    UI_SET_RELBIT: [
-        UInput.events.REL_X,
-        UInput.events.REL_Y,
-        UInput.events.REL_WHEEL,
-        UInput.events.REL_HWHEEL,
-    ],
     UI_SET_KEYBIT: [
         UInput.events.BTN_LEFT,
         UInput.events.BTN_RIGHT,
@@ -39,6 +33,12 @@ const SETUP_OPTIONS = {
         UInput.events.KEY_B,
         UInput.events.KEY_Y,
         UInput.events.KEY_SPACE,
+    ],
+    UI_SET_RELBIT: [
+        UInput.events.REL_X,
+        UInput.events.REL_Y,
+        UInput.events.REL_WHEEL,
+        UInput.events.REL_HWHEEL,
     ],
 };
 
@@ -87,8 +87,8 @@ class UInputMouse {
     async moveMouse(x, y) {
         const device = await this.createDevice();
 
-        await device.sendEvent(UInput.EV_REL, UInput.REL_X, x, false);
-        await device.sendEvent(UInput.EV_REL, UInput.REL_Y, y, true);
+        await device.sendEvent(UInput.events.EV_REL, UInput.events.REL_X, x, false);
+        await device.sendEvent(UInput.events.EV_REL, UInput.events.REL_Y, y, true);
         await sleep(this.delay);
     }
 

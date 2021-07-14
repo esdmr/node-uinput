@@ -1,12 +1,12 @@
-/// <reference path="./index.d.ts" />
+/// <reference path="./uinput.d.ts" />
 const fs = require('fs');
 const bindings = require('bindings')('uinput');
 const ioctl = require('ioctl');
 const os = require('os');
 
-/** @type {import('./index').InputEvent} */
+/** @type {import('./uinput').InputEvent} */
 const inputEvent = bindings.input_event;
-/** @type {import('./index')['events']} */
+/** @type {import('./uinput')['events']} */
 const events = bindings.events;
 
 let writeUInt16 = /** @type {'writeUInt16LE' | 'writeUInt16BE'} */
@@ -23,7 +23,7 @@ let writeInt32 = /** @type {'writeInt32LE' | 'writeInt32BE'} */
 // };
 
 /**
- * @param {import('./index').CreateConfig['id']} options
+ * @param {import('./uinput').CreateConfig['id']} options
  */
 function inputId (options) {
     const buffer = Buffer.alloc(4 * 2);
@@ -44,7 +44,7 @@ function deviceName (name = '') {
 }
 
 /**
- * @param {import('./index').Abs[]} absArr
+ * @param {import('./uinput').Abs[]} absArr
  */
 function absArray (absArr = []) {
     const buf = Buffer.alloc(events.ABS_CNT * 4);
@@ -59,7 +59,7 @@ function absArray (absArr = []) {
 /**
  * @param {number} offset
  * @param {number} value
- * @returns {import('./index').Abs}
+ * @returns {import('./uinput').Abs}
  */
 function abs (offset, value) {
     return {
@@ -69,7 +69,7 @@ function abs (offset, value) {
 };
 
 /**
- * @param {import('./index').CreateConfig} options
+ * @param {import('./uinput').CreateConfig} options
  */
 function uinputUserDev (options) {
     const name = deviceName(options.name);

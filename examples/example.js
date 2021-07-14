@@ -1,3 +1,4 @@
+/// <reference path="../index.d.ts"/>
 const UInput = require('uinput');
 
 const SETUP_OPTIONS = {
@@ -74,8 +75,8 @@ class UInputMouse {
     async moveMouse(x, y) {
         const device = await this.createDevice();
 
-        await device.sendEvent(UInput.EV_REL, UInput.REL_X, x, false);
-        await device.sendEvent(UInput.EV_REL, UInput.REL_Y, y, true);
+        await device.sendEvent(UInput.events.EV_REL, UInput.events.REL_X, x, false);
+        await device.sendEvent(UInput.events.EV_REL, UInput.events.REL_Y, y, true);
         await sleep(this.delay);
     }
 
